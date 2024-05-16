@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "progetto_azure_functions": {
+      "commandName": "Project",
+      "commandLineArgs": "--port 7162",
+      "launchBrowser": false
+    }
+  }
+}
