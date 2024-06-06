@@ -27,12 +27,23 @@ public class DocumentManager
         {
             var formCollection = await req.ReadFormAsync();
 
+            if (formCollection.Files.Count == 0)
+            {
+                logger.LogWarning("No file was uploaded in the request.");
+                return new BadRequestObjectResult("No file was uploaded in the request.");
+            }
+
+            var accountId = formCollection["accountId"].ToString();
+            var accountEmail = formCollection["accountEmail"].ToString();
+            
+            var fileUrls = new List<string>();
+
             foreach (var file in formCollection.Files)
             {
                 if (file != null && file.Length > 0)
                 {
                     // Get a reference to a blob
-                    BlobClient blobClient = containerClient.GetBlobClient(file.FileName);
+                    BlobClient blobClient = containerClient.GetBlobClient(Uri.EscapeDataString(file.FileName));
 
                     // Upload the file stream to the blob
                     using (var stream = file.OpenReadStream())
@@ -40,15 +51,19 @@ public class DocumentManager
                         await blobClient.UploadAsync(stream, overwrite: true);
                     }
 
+                    // Set metadata
+                    await blobClient.SetMetadataAsync(new Dictionary<string, string>
+                    {
+                        { "Id", accountId },
+                        { "Email", accountEmail }
+                    });
+
                     logger.LogInformation($"File {file.FileName} uploaded successfully to container {containerName}");
 
-                    string fileUrl = blobClient.Uri.ToString();
-
-                    return new OkObjectResult(new { fileUrl });
+                    fileUrls.Add(blobClient.Uri.ToString());
                 }
             }
-            logger.LogWarning("No file was uploaded in the request.");
-            return new BadRequestObjectResult("No file was uploaded in the request.");
+            return new OkObjectResult(new { fileUrls });
         }
         catch (Exception ex)
         {
