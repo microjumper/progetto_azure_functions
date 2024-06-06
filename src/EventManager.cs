@@ -12,7 +12,6 @@ public class EventManager
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "event";
-
     private static readonly Container container;
 
     static EventManager() => container = CosmosClientSingleton.Instance.GetContainer(DatabaseId, ContainerId);
