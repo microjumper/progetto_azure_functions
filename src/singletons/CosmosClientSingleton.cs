@@ -2,7 +2,7 @@ using Microsoft.Azure.Cosmos;
 
 namespace appointment_scheduler.functions;
 
-public static class CosmosClientManager
+public static class CosmosClientSingleton
 {
     private static readonly Lazy<CosmosClient> lazyClient = new (InitializeCosmosClient);
     

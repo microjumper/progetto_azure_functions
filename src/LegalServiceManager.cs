@@ -17,7 +17,7 @@ public class LegalServiceManager
 
         try 
         {
-            Container container = CosmosClientManager.Instance.GetContainer("appointment_scheduler_db", "legal_service");
+            Container container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db", "legal_service");
 
             var query = new QueryDefinition("SELECT * FROM c");
             var response = await container.GetItemQueryIterator<LegalService>(query).ReadNextAsync();
@@ -42,7 +42,7 @@ public class LegalServiceManager
         var newService = JsonConvert.DeserializeObject<LegalService>(requestBody);
 
         try {
-            var container = CosmosClientManager.Instance.GetContainer("appointment_scheduler_db", "legal_service");
+            var container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db", "legal_service");
             newService.Id = Guid.NewGuid().ToString();
             var response = await container.CreateItemAsync(newService, new PartitionKey(newService.Id));
 
@@ -63,7 +63,7 @@ public class LegalServiceManager
 
         try
         {
-            var container = CosmosClientManager.Instance.GetContainer("appointment_scheduler_db", "legal_service");
+            var container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db", "legal_service");
             var response = await container.DeleteItemAsync<LegalService>(id, new PartitionKey(id));
 
             return new OkObjectResult(response.Resource);

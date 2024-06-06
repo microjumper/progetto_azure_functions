@@ -15,7 +15,7 @@ public class EventManager
 
     private static readonly Container container;
 
-    static EventManager() => container = CosmosClientManager.Instance.GetContainer(DatabaseId, ContainerId);
+    static EventManager() => container = CosmosClientSingleton.Instance.GetContainer(DatabaseId, ContainerId);
 
     [Function("GetEvents")]
     public static async Task<IActionResult> GetEvents([HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/all")] HttpRequest req, FunctionContext context)

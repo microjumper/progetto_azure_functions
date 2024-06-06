@@ -21,7 +21,7 @@ public class BookingManager
 
         try 
         {
-            var container = CosmosClientManager.Instance.GetContainer("appointment_scheduler_db","event");
+            var container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db","event");
             var query = new QueryDefinition("SELECT * FROM c WHERE c.extendedProps.legalService = @legalServiceId")
                 .WithParameter("@legalServiceId", legalServiceId);
 
