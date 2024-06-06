@@ -1,4 +1,5 @@
 using Azure.Storage.Blobs;
+using Azure.Storage.Blobs.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -8,6 +9,8 @@ namespace appointment_scheduler.functions;
 
 public class DocumentManager
 {
+    private const string containerName = "documents";
+
     [Function("Upload")]
     public static async Task<IActionResult> Upload(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "documents/upload")]
@@ -16,59 +19,72 @@ public class DocumentManager
     {
         var logger = context.GetLogger(nameof(Upload));
 
-        var connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage");
-        var containerName = "documents";
-
-        // Initialize Blob service and container clients
-        var blobServiceClient = new BlobServiceClient(connectionString);
-        var containerClient = blobServiceClient.GetBlobContainerClient(containerName);
+        var containerClient = BlobServiceClientSingleton.Instance.GetBlobContainerClient(containerName);
 
         try
         {
             var formCollection = await req.ReadFormAsync();
 
-            if (formCollection.Files.Count == 0)
+            if(formCollection.Files.Count > 0)
             {
-                logger.LogWarning("No file was uploaded in the request.");
-                return new BadRequestObjectResult("No file was uploaded in the request.");
-            }
+                var accountId = formCollection["accountId"].ToString();
+                var accountEmail = formCollection["accountEmail"].ToString();
+                
+                var fileMetadatas = new List<Dictionary<string, string>>(); // File details to return
 
-            var accountId = formCollection["accountId"].ToString();
-            var accountEmail = formCollection["accountEmail"].ToString();
-            
-            var fileUrls = new List<string>();
-
-            foreach (var file in formCollection.Files)
-            {
-                if (file != null && file.Length > 0)
+                foreach (var file in formCollection.Files)
                 {
-                    // Get a reference to a blob
-                    BlobClient blobClient = containerClient.GetBlobClient(Uri.EscapeDataString(file.FileName));
-
-                    // Upload the file stream to the blob
-                    using (var stream = file.OpenReadStream())
+                    if (file != null && file.Length > 0)
                     {
-                        await blobClient.UploadAsync(stream, overwrite: true);
+                        var fileMetadata = await WriteFile(containerClient, file, accountId, accountEmail, logger);
+
+                        fileMetadatas.Add(fileMetadata);
                     }
-
-                    // Set metadata
-                    await blobClient.SetMetadataAsync(new Dictionary<string, string>
-                    {
-                        { "Id", accountId },
-                        { "Email", accountEmail }
-                    });
-
-                    logger.LogInformation($"File {file.FileName} uploaded successfully to container {containerName}");
-
-                    fileUrls.Add(blobClient.Uri.ToString());
                 }
+                
+                return new OkObjectResult(fileMetadatas);
             }
-            return new OkObjectResult(new { fileUrls });
+
+            logger.LogWarning("No file was uploaded in the request.");
+            return new BadRequestObjectResult("No file was uploaded in the request.");
+
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error uploading file");
             return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }
+    }
+
+    private static async Task<Dictionary<string, string>> WriteFile(BlobContainerClient containerClient, IFormFile file, string accountId, string accountEmail, ILogger logger)
+    {
+        var fileId = Guid.NewGuid().ToString();
+
+        var fileExtension = Path.GetExtension(file.FileName);
+        var fileName = fileId + fileExtension;
+
+        // Get a reference to a blob
+        BlobClient blobClient = containerClient.GetBlobClient(fileName);
+
+        // Upload the file stream to the blob
+        using (var stream = file.OpenReadStream())
+        {
+            await blobClient.UploadAsync(stream, new BlobHttpHeaders { ContentType = file.ContentType });
+        }
+
+        var metadata = new Dictionary<string, string>
+        {
+            { "fileName", file.FileName },
+            { "fileUrl", blobClient.Uri.ToString() },
+            { "accountId", accountId },
+            { "accountEmail", accountEmail }
+        };
+
+        // Set metadata
+        await blobClient.SetMetadataAsync(metadata);
+
+        logger.LogInformation($"File {file.FileName} uploaded successfully to container {containerName}");
+
+        return metadata;
     }
 }
