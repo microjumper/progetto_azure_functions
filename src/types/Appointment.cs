@@ -8,7 +8,7 @@ public class Appointment
     public string? LegalServiceTitle { get; set; }
     public string? EventId { get; set; }
     public string? EventDate { get; set; }
-    public string? ClientId { get; set; }
+    public string? AccountId { get; set; }
     public List<FileMetadata> FileMetadata { get; set; } = [];
 }
 
