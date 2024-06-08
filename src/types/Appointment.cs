@@ -12,7 +12,7 @@ public class Appointment
 
 public class FileMetadata
 {
-    public string? FileName { get; set; }
+    public string? OriginalFileName { get; set; }
     public string? FileUrl { get; set; }
     public string? AccountId { get; set; }
     public string? AccountEmail { get; set; }

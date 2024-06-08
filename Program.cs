@@ -2,13 +2,22 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Azure.Cosmos;
+using Microsoft.Extensions.Logging;
 using Azure.Storage.Blobs;
+
+using appointment_scheduler.functions;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureServices(services => {
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
+        
+        services.AddLogging(logging =>
+        {
+            logging.AddConsole();
+        });
+
         services.AddSingleton(s =>
         {
             var connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING_SETTING");
@@ -54,6 +63,10 @@ var host = new HostBuilder()
                 throw new InvalidOperationException($"Error creating BlobServiceClient: {e.Message}", e);
             }
         });
+
+        services.AddSingleton<EventManager>();
+        services.AddSingleton<DocumentManager>();
+        services.AddSingleton<BookingManager>();
     })
     .Build();
 

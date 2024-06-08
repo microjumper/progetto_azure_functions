@@ -1,4 +1,5 @@
 using appointment_scheduler.types;
+using appointment_scheduler.utils;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
@@ -8,30 +9,33 @@ using Newtonsoft.Json;
 
 namespace appointment_scheduler.functions;
 
-public class EventManager(CosmosClient cosmosClient)
+public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logger)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "event";
     private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
     [Function("GetEvents")]
-    public async Task<IActionResult> GetEvents([HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/all")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> GetEvents([HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/all")] HttpRequest req)
     {
-        var logger = context.GetLogger(nameof(GetEvents));
+        var container = cosmosClient.GetContainer(DatabaseId, ContainerId);
+        var query = new QueryDefinition("SELECT * FROM c");
 
-        try 
-        {
-            var query = new QueryDefinition("SELECT * FROM c");
-            var response = await container.GetItemQueryIterator<EventApi>(query).ReadNextAsync();
-            
-            return new OkObjectResult(response.ToList());
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, "An unexpected error occurred.");
-            
-            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
-        }
+        var response = await QueryExecutor.ExecuteRetrivingQueryAsync<EventApi>(container, query, logger);
+        return new OkObjectResult(response);
+    }
+
+    [Function("GetEventsByLegalService")]
+    public async Task<IActionResult> GetEventsByLegalService(
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/services/{id}")] HttpRequest req,
+        string id)
+    {
+        var container = cosmosClient.GetContainer(DatabaseId, ContainerId);
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.extendedProps.legalService = @legalServiceId")
+            .WithParameter("@legalServiceId", id);
+
+        var response = await QueryExecutor.ExecuteRetrivingQueryAsync<EventApi>(container, query, logger);
+        return new OkObjectResult(response);
     }
 
     [Function("AddEvent")]
@@ -44,9 +48,9 @@ public class EventManager(CosmosClient cosmosClient)
 
         try {
             newEvent.Id = Guid.NewGuid().ToString();
-            var response = await container.CreateItemAsync(newEvent, new PartitionKey(newEvent.Id));
 
-            return new OkObjectResult(response.Resource);
+            var response = await QueryExecutor.CreateItemAsync(container, newEvent, newEvent.Id, logger);
+            return new OkObjectResult(response);
         }
         catch (Exception e)
         {
