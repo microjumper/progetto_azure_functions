@@ -8,17 +8,19 @@ using Newtonsoft.Json;
 
 namespace appointment_scheduler.functions;
 
-public class LegalServiceManager
+public class LegalServiceManager(CosmosClient cosmosClient)
 {
+    private const string DatabaseId = "appointment_scheduler_db";
+    private const string ContainerId = "legal_service";
+    private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
+
     [Function("GetAll")]
-    public static async Task<IActionResult> GetAll([HttpTrigger(AuthorizationLevel.Function, "get", Route = "legalServices/all")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> GetAll([HttpTrigger(AuthorizationLevel.Function, "get", Route = "legalServices/all")] HttpRequest req, FunctionContext context)
     {
         var logger = context.GetLogger(nameof(GetAll));
 
         try 
         {
-            Container container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db", "legal_service");
-
             var query = new QueryDefinition("SELECT * FROM c");
             var response = await container.GetItemQueryIterator<LegalService>(query).ReadNextAsync();
 
@@ -33,7 +35,7 @@ public class LegalServiceManager
     }
 
     [Function("AddLegalService")]
-    public static async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "legalServices/add")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "legalServices/add")] HttpRequest req, FunctionContext context)
     {
         var logger = context.GetLogger(nameof(AddEvent));
 
@@ -42,7 +44,6 @@ public class LegalServiceManager
         var newService = JsonConvert.DeserializeObject<LegalService>(requestBody);
 
         try {
-            var container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db", "legal_service");
             newService.Id = Guid.NewGuid().ToString();
             var response = await container.CreateItemAsync(newService, new PartitionKey(newService.Id));
 
@@ -57,13 +58,12 @@ public class LegalServiceManager
     }
 
     [Function("RemoveLegalService")]
-    public static async Task<IActionResult> RemoveLegalService([HttpTrigger(AuthorizationLevel.Function, "delete", Route = "legalServices/delete/{id}")] HttpRequest req, FunctionContext context, string id)
+    public async Task<IActionResult> RemoveLegalService([HttpTrigger(AuthorizationLevel.Function, "delete", Route = "legalServices/delete/{id}")] HttpRequest req, FunctionContext context, string id)
     {
         var logger = context.GetLogger(nameof(RemoveLegalService));
 
         try
         {
-            var container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db", "legal_service");
             var response = await container.DeleteItemAsync<LegalService>(id, new PartitionKey(id));
 
             return new OkObjectResult(response.Resource);

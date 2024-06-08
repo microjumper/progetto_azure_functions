@@ -9,12 +9,11 @@ using appointment_scheduler.types;
 
 namespace appointment_scheduler.functions;
 
-public class BookingManager
+public class BookingManager(CosmosClient cosmosClient)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "appointment";
-    private static readonly Container container;
-    static BookingManager() => container = CosmosClientSingleton.Instance.GetContainer(DatabaseId, ContainerId);
+    private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
     [Function("GetEventsByLegalService")]
     public async Task<IActionResult> GetEventsByLegalService(
@@ -27,7 +26,6 @@ public class BookingManager
 
         try 
         {
-            var container = CosmosClientSingleton.Instance.GetContainer("appointment_scheduler_db","event");
             var query = new QueryDefinition("SELECT * FROM c WHERE c.extendedProps.legalService = @legalServiceId")
                 .WithParameter("@legalServiceId", legalServiceId);
 
@@ -73,6 +71,25 @@ public class BookingManager
             logger.LogError(e.Message);
 
             return new StatusCodeResult(500);
+        }
+    }
+
+    [Function("Cancel")]
+    public static async Task<IActionResult> Cancel(
+        [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "appointments/cancel/{appointmentId}")] HttpRequest req,
+        FunctionContext context,
+        string appointmentId)
+    {
+        var logger = context.GetLogger(nameof(Cancel));
+
+        try
+        {
+            return new OkResult();
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "An error occurred while removing the appointment.");
+            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }
     }
 }

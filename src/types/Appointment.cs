@@ -1,5 +1,3 @@
-using Newtonsoft.Json;
-
 namespace appointment_scheduler.types;
 public class Appointment
 {

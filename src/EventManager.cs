@@ -8,16 +8,14 @@ using Newtonsoft.Json;
 
 namespace appointment_scheduler.functions;
 
-public class EventManager
+public class EventManager(CosmosClient cosmosClient)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "event";
-    private static readonly Container container;
-
-    static EventManager() => container = CosmosClientSingleton.Instance.GetContainer(DatabaseId, ContainerId);
+    private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
     [Function("GetEvents")]
-    public static async Task<IActionResult> GetEvents([HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/all")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> GetEvents([HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/all")] HttpRequest req, FunctionContext context)
     {
         var logger = context.GetLogger(nameof(GetEvents));
 
@@ -37,7 +35,7 @@ public class EventManager
     }
 
     [Function("AddEvent")]
-    public static async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "events/add")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "events/add")] HttpRequest req, FunctionContext context)
     {
         var logger = context.GetLogger(nameof(AddEvent));
 
@@ -59,7 +57,7 @@ public class EventManager
     }
 
     [Function("UpdateEvent")]
-    public static async Task<IActionResult> UpdateEvent([HttpTrigger(AuthorizationLevel.Function, "put", Route = "events/update/{id}")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> UpdateEvent([HttpTrigger(AuthorizationLevel.Function, "put", Route = "events/update/{id}")] HttpRequest req, FunctionContext context)
     {
         var logger = context.GetLogger(nameof(UpdateEvent));
 
@@ -80,7 +78,7 @@ public class EventManager
     }
 
     [Function("DeleteEvent")]
-    public static async Task<IActionResult> DeleteEvent([HttpTrigger(AuthorizationLevel.Function, "delete", Route = "events/delete/{id}")] HttpRequest req, FunctionContext context, string id)
+    public async Task<IActionResult> DeleteEvent([HttpTrigger(AuthorizationLevel.Function, "delete", Route = "events/delete/{id}")] HttpRequest req, FunctionContext context, string id)
     {
         var logger = context.GetLogger(nameof(DeleteEvent));
 

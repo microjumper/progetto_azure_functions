@@ -7,19 +7,18 @@ using Microsoft.Extensions.Logging;
 
 namespace appointment_scheduler.functions;
 
-public class DocumentManager
+public class DocumentManager(BlobServiceClient serviceClient)
 {
-    private const string containerName = "documents";
+    private const string ContainerName = "documents";
+    private readonly BlobContainerClient containerClient = serviceClient.GetBlobContainerClient(ContainerName);
 
     [Function("Upload")]
-    public static async Task<IActionResult> Upload(
+    public async Task<IActionResult> Upload(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "documents/upload")]
         HttpRequest req,
         FunctionContext context)
     {
         var logger = context.GetLogger(nameof(Upload));
-
-        var containerClient = BlobServiceClientSingleton.Instance.GetBlobContainerClient(containerName);
 
         try
         {
@@ -56,7 +55,7 @@ public class DocumentManager
         }
     }
 
-    private static async Task<Dictionary<string, string>> WriteFile(BlobContainerClient containerClient, IFormFile file, string accountId, string accountEmail, ILogger logger)
+    private async Task<Dictionary<string, string>> WriteFile(BlobContainerClient containerClient, IFormFile file, string accountId, string accountEmail, ILogger logger)
     {
         var fileId = Guid.NewGuid().ToString();
 
@@ -83,7 +82,7 @@ public class DocumentManager
         // Set metadata
         await blobClient.SetMetadataAsync(metadata);
 
-        logger.LogInformation($"File {file.FileName} uploaded successfully to container {containerName}");
+        logger.LogInformation($"File {file.FileName} uploaded successfully to container {ContainerName}");
 
         return metadata;
     }
