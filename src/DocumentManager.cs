@@ -14,8 +14,7 @@ public class DocumentManager(BlobServiceClient serviceClient, ILogger<DocumentMa
     private readonly BlobContainerClient containerClient = serviceClient.GetBlobContainerClient(ContainerName);
 
     [Function("Upload")]
-    public async Task<IActionResult> Upload(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "documents/upload")] HttpRequest req)
+    public async Task<IActionResult> Upload([HttpTrigger(AuthorizationLevel.Function, "post", Route = "documents/upload")] HttpRequest req)
     {
         try
         {
@@ -45,9 +44,9 @@ public class DocumentManager(BlobServiceClient serviceClient, ILogger<DocumentMa
             
             return new BadRequestObjectResult("No file was uploaded in the request.");
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            logger.LogError(ex, "Error uploading file");
+            logger.LogError(e, "Error uploading file");
             
             return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }
@@ -98,9 +97,9 @@ public class DocumentManager(BlobServiceClient serviceClient, ILogger<DocumentMa
 
                 logger.LogInformation($"Deleted file {metadata.OriginalFileName}");
             }
-            catch (Exception ex)
+            catch (Exception e)
             {
-                logger.LogError(ex, $"Error deleting file {metadata.OriginalFileName}");
+                logger.LogError(e, $"Error deleting file {metadata.OriginalFileName}");
             }
         }
     }

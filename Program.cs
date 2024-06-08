@@ -64,6 +64,7 @@ var host = new HostBuilder()
             }
         });
 
+        services.AddSingleton<LegalServiceManager>();
         services.AddSingleton<EventManager>();
         services.AddSingleton<DocumentManager>();
         services.AddSingleton<BookingManager>();

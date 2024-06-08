@@ -5,7 +5,7 @@ namespace appointment_scheduler.utils;
 
 public static class QueryExecutor
 {
-    public static async Task<List<T>> ExecuteRetrivingQueryAsync<T>(Container container, QueryDefinition query, ILogger logger)
+    public static async Task<List<T>> RetrieveItemsAsync<T>(Container container, QueryDefinition query, ILogger logger)
     {
         var iterator = container.GetItemQueryIterator<T>(query);
         var results = new List<T>();

@@ -10,25 +10,26 @@ using appointment_scheduler.utils;
 
 namespace appointment_scheduler.functions;
 
-public class BookingManager(CosmosClient cosmosClient, DocumentManager documentManager, ILogger<BookingManager> logger)
+public class BookingManager(CosmosClient cosmosClient, DocumentManager documentManager, EventManager eventManager, ILogger<BookingManager> logger)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "appointment";
 
     [Function("GetAppointments")]
-    public async Task<IActionResult> GetAppointments([HttpTrigger(AuthorizationLevel.Function, "get", Route = "appointments/all")] HttpRequest req)
+    public async Task<IActionResult> GetAppointments([HttpTrigger(AuthorizationLevel.Function, "get", Route = "appointments")] HttpRequest req)
     {
         try
         {
             var container = cosmosClient.GetContainer(DatabaseId, ContainerId);
             var query = new QueryDefinition("SELECT * FROM c");
 
-            var response = await QueryExecutor.ExecuteRetrivingQueryAsync<Appointment>(container, query, logger);
+            var response = await QueryExecutor.RetrieveItemsAsync<Appointment>(container, query, logger);
+
             return new OkObjectResult(response);
         }
         catch (Exception e)
         {
-            logger.LogError(e.Message);
+            logger.LogError(e, e.Message);
 
             return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }
@@ -46,11 +47,14 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
             newAppointment.Id = Guid.NewGuid().ToString();
 
             var response = await QueryExecutor.CreateItemAsync(container, newAppointment, newAppointment.Id, logger);
+
+            await eventManager.SetEventAsBooked(newAppointment.EventId, newAppointment);
+
             return new OkObjectResult(response);
         }
         catch (Exception e)
         {
-            logger.LogError(e.Message);
+            logger.LogError(e, e.Message);
 
             return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }
@@ -74,11 +78,13 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
 
             var response = await container.DeleteItemAsync<Appointment>(appointmentId, new PartitionKey(appointmentId));
 
+            await eventManager.SetEventAsBookable(appointment.EventId);
+
             return new OkObjectResult(response.Resource);
         }
         catch (Exception e)
         {
-            logger.LogError(e, "An error occurred while removing the appointment.");
+            logger.LogError(e, e.Message);
 
             return new StatusCodeResult(StatusCodes.Status500InternalServerError);
         }

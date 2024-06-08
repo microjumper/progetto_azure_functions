@@ -8,17 +8,15 @@ using Newtonsoft.Json;
 
 namespace appointment_scheduler.functions;
 
-public class LegalServiceManager(CosmosClient cosmosClient)
+public class LegalServiceManager(CosmosClient cosmosClient, ILogger<LegalServiceManager> logger)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "legal_service";
     private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
     [Function("GetAll")]
-    public async Task<IActionResult> GetAll([HttpTrigger(AuthorizationLevel.Function, "get", Route = "legalServices/all")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> GetAll([HttpTrigger(AuthorizationLevel.Function, "get", Route = "legalServices/all")] HttpRequest req)
     {
-        var logger = context.GetLogger(nameof(GetAll));
-
         try 
         {
             var query = new QueryDefinition("SELECT * FROM c");
@@ -35,10 +33,8 @@ public class LegalServiceManager(CosmosClient cosmosClient)
     }
 
     [Function("AddLegalService")]
-    public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "legalServices/add")] HttpRequest req, FunctionContext context)
+    public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "legalServices/add")] HttpRequest req)
     {
-        var logger = context.GetLogger(nameof(AddEvent));
-
         string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
 
         var newService = JsonConvert.DeserializeObject<LegalService>(requestBody);
@@ -58,10 +54,10 @@ public class LegalServiceManager(CosmosClient cosmosClient)
     }
 
     [Function("RemoveLegalService")]
-    public async Task<IActionResult> RemoveLegalService([HttpTrigger(AuthorizationLevel.Function, "delete", Route = "legalServices/delete/{id}")] HttpRequest req, FunctionContext context, string id)
+    public async Task<IActionResult> RemoveLegalService(
+        [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "legalServices/delete/{id}")] HttpRequest req,
+        string id)
     {
-        var logger = context.GetLogger(nameof(RemoveLegalService));
-
         try
         {
             var response = await container.DeleteItemAsync<LegalService>(id, new PartitionKey(id));
