@@ -7,6 +7,7 @@ public class Appointment
     public string? EventId { get; set; }
     public string? EventDate { get; set; }
     public string? AccountId { get; set; }
+    public string? AccountEmail { get; set; }
     public List<FileMetadata> FileMetadata { get; set; } = [];
 }
 
