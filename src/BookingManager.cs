@@ -1,12 +1,11 @@
+using AppointmentScheduler.Types;
+using AppointmentScheduler.Utils;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
-
-using AppointmentScheduler.Types;
-using AppointmentScheduler.Utils;
 
 namespace AppointmentScheduler.Functions;
 
@@ -25,6 +24,28 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
         return new OkObjectResult(response);
     }
 
+    [Function("GetAppointmentById")]
+    public async Task<IActionResult> GetApGetAppointmentByIdointments(
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "appointments/{id}")] HttpRequest req,
+        string id)
+    {
+        try
+        {
+            var response = await container.ReadItemAsync<Appointment>(id, new PartitionKey(id));
+            return new OkObjectResult(response.Resource);
+        }
+        catch (CosmosException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return new NotFoundResult();
+        }
+        catch (CosmosException e)
+        {
+            logger.LogError($"Error retrieving item: {e}");
+
+            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+        }
+    }
+
     [Function("Book")]
     public async Task<IActionResult> Book([HttpTrigger(AuthorizationLevel.Function, "post", Route = "appointments/book")] HttpRequest req)
     {
@@ -38,7 +59,7 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
 
             var response = await QueryExecutor.CreateItemAsync(container, newAppointment, newAppointment.Id, logger);
 
-            await eventManager.SetEventAsBooked(newAppointment.EventId, newAppointment);
+            await eventManager.SetEventAsBooked(newAppointment.EventId, newAppointment.Id);
 
             return new OkObjectResult(response);
         }

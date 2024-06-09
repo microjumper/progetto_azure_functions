@@ -37,6 +37,9 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
         var query = new QueryDefinition("SELECT * FROM c");
 
         var response = await QueryExecutor.RetrieveItemsAsync<EventApi>(container, query, logger);
+    
+        EventApi[] events = response.ToArray();
+
         return new OkObjectResult(response);
     }
 
@@ -86,13 +89,13 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
         return new OkObjectResult(deletedEvent);
     }
 
-    public async Task<EventApi?> SetEventAsBooked(string id, Appointment appointment)
+    public async Task<EventApi?> SetEventAsBooked(string eventId, string appointmentId)
     {
-        var eventApi = await GetEventByIdAsync(id);
+        var eventApi = await GetEventByIdAsync(eventId);
 
         if(eventApi != null)
         {
-            eventApi.ExtendedProps?.Add("appointment", appointment);
+            eventApi.ExtendedProps?.Add("appointment", appointmentId);
             eventApi.BackgroundColor = "#F44336";
             eventApi.BorderColor = "#F44336";
 
