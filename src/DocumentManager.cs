@@ -1,6 +1,7 @@
 using AppointmentScheduler.Types;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
+using Azure.Storage.Sas;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -68,12 +69,15 @@ public class DocumentManager(BlobServiceClient serviceClient, ILogger<DocumentMa
             await blobClient.UploadAsync(stream, new BlobHttpHeaders { ContentType = file.ContentType });
         }
 
+        var sasToken = GenerateSasToken(blobClient, file.FileName);
+
         var metadata = new Dictionary<string, string>
         {
             { "originalFileName", file.FileName },
             { "fileUrl", blobClient.Uri.ToString() },
             { "accountId", accountId },
-            { "accountEmail", accountEmail }
+            { "accountEmail", accountEmail },
+            { "sasToken", sasToken }
         };
 
         // Set metadata
@@ -102,5 +106,22 @@ public class DocumentManager(BlobServiceClient serviceClient, ILogger<DocumentMa
                 logger.LogError(e, $"Error deleting file {metadata.OriginalFileName}");
             }
         }
+    }
+
+    private string GenerateSasToken(BlobClient blobClient, string fileName)
+    {
+        var sasBuilder = new BlobSasBuilder
+        {
+            BlobContainerName = blobClient.BlobContainerName,
+            BlobName = blobClient.Name,
+            Resource = "b",
+            ExpiresOn = DateTimeOffset.UtcNow.AddDays(14) // Set the expiration time for the SAS token
+        };
+
+        sasBuilder.SetPermissions(BlobSasPermissions.Read);
+
+        sasBuilder.ContentDisposition = $"inline; filename={fileName}";
+
+        return blobClient.GenerateSasUri(sasBuilder).Query;
     }
 }

@@ -17,4 +17,5 @@ public class FileMetadata
     public string? FileUrl { get; set; }
     public string? AccountId { get; set; }
     public string? AccountEmail { get; set; }
+    public string? SasToken { get; set; }
 }
