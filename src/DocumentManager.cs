@@ -1,4 +1,4 @@
-using appointment_scheduler.types;
+using AppointmentScheduler.Types;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Microsoft.AspNetCore.Http;
@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 
-namespace appointment_scheduler.functions;
+namespace AppointmentScheduler.Functions;
 
 public class DocumentManager(BlobServiceClient serviceClient, ILogger<DocumentManager> logger)
 {

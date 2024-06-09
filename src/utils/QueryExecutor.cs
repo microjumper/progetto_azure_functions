@@ -1,19 +1,33 @@
 using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 
-namespace appointment_scheduler.utils;
+namespace AppointmentScheduler.Utils;
 
 public static class QueryExecutor
 {
     public static async Task<List<T>> RetrieveItemsAsync<T>(Container container, QueryDefinition query, ILogger logger)
     {
-        var iterator = container.GetItemQueryIterator<T>(query);
         var results = new List<T>();
 
-        while (iterator.HasMoreResults)
+        try
         {
-            var response = await iterator.ReadNextAsync();
-            results.AddRange(response);
+            using var iterator = container.GetItemQueryIterator<T>(query);
+            
+            while (iterator.HasMoreResults)
+            {
+                var response = await iterator.ReadNextAsync();
+                results.AddRange(response);
+            }
+        }
+        catch (CosmosException cosmosException)
+        {
+            logger.LogError(cosmosException, "Cosmos DB error occurred while retrieving items: {Message}", cosmosException.Message);
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "An error occurred while retrieving items: {Message}", e.Message);
+            throw;
         }
 
         return results;
@@ -21,8 +35,58 @@ public static class QueryExecutor
 
     public static async Task<T> CreateItemAsync<T>(Container container, T item, string partitionKey, ILogger logger)
     {
-        var response = await container.CreateItemAsync(item, new PartitionKey(partitionKey));
+        try
+        {
+            var response = await container.CreateItemAsync(item, new PartitionKey(partitionKey));
+            return response.Resource;
+        }
+        catch (CosmosException cosmosException)
+        {
+            logger.LogError(cosmosException, "Cosmos DB error occurred while creating item: {Message}", cosmosException.Message);
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "An error occurred while creating item: {Message}", e.Message);
+            throw;
+        }
+    }
 
-        return response.Resource;
+    public static async Task<T> UpdateItemAsync<T>(Container container, T updatedItem, string itemId, string partitionKey, ILogger logger)
+    {
+        try
+        {
+            var response = await container.ReplaceItemAsync(updatedItem, itemId, new PartitionKey(partitionKey));
+            return response.Resource;
+        }
+        catch (CosmosException cosmosException)
+        {
+            logger.LogError(cosmosException, "Cosmos DB error occurred while updating item: {Message}", cosmosException.Message);
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "An error occurred while updating item: {Message}", e.Message);
+            throw;
+        }
+    }
+
+    public static async Task<T> DeleteItemAsync<T>(Container container, string itemId, string partitionKey, ILogger logger)
+    {
+        try
+        {
+            var response = await container.DeleteItemAsync<T>(itemId, new PartitionKey(partitionKey));
+            return response.Resource;
+        }
+        catch (CosmosException cosmosException)
+        {
+            logger.LogError(cosmosException, "Cosmos DB error occurred while deleting item: {Message}", cosmosException.Message);
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "An error occurred while deleting item: {Message}", e.Message);
+            throw;
+        }
     }
 }

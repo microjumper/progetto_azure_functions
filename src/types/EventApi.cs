@@ -1,4 +1,4 @@
-namespace appointment_scheduler.types;
+namespace AppointmentScheduler.Types;
 
 public class EventApi
 {

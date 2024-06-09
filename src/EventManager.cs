@@ -1,6 +1,6 @@
 using System.Net;
-using appointment_scheduler.types;
-using appointment_scheduler.utils;
+using AppointmentScheduler.Types;
+using AppointmentScheduler.Utils;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
@@ -8,7 +8,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
-namespace appointment_scheduler.functions;
+namespace AppointmentScheduler.Functions;
 
 public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logger)
 {
@@ -54,58 +54,36 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
     [Function("AddEvent")]
     public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "events/add")] HttpRequest req)
     {
-        string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+        using var reader = new StreamReader(req.Body);
+        string requestBody = await reader.ReadToEndAsync();
+
         var newEvent = JsonConvert.DeserializeObject<EventApi>(requestBody);
+        newEvent.Id = Guid.NewGuid().ToString();
 
-        try
-        {
-            newEvent.Id = Guid.NewGuid().ToString();
+        newEvent.BackgroundColor = "#4CAF50";
+        newEvent.BorderColor = "#4CAF50";
 
-            var response = await QueryExecutor.CreateItemAsync(container, newEvent, newEvent.Id, logger);
-            return new OkObjectResult(response);
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, e.Message);
-
-            return new StatusCodeResult(500);
-        }
+        var response = await QueryExecutor.CreateItemAsync(container, newEvent, newEvent.Id, logger);
+        return new OkObjectResult(response);
     }
 
     [Function("UpdateEvent")]
     public async Task<IActionResult> UpdateEvent([HttpTrigger(AuthorizationLevel.Function, "put", Route = "events/update/{id}")] HttpRequest req)
     {
-        string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+        using var reader = new StreamReader(req.Body);
+        string requestBody = await reader.ReadToEndAsync();
+
         var updatedEvent = JsonConvert.DeserializeObject<EventApi>(requestBody);
 
-        try {
-            var response = await container.ReplaceItemAsync(updatedEvent, updatedEvent.Id, new PartitionKey(updatedEvent.Id));
-
-            return new OkObjectResult(response.Resource);
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, e.Message);
-
-            return new StatusCodeResult(500);
-        }
+        var response = await QueryExecutor.UpdateItemAsync(container, updatedEvent, updatedEvent.Id, updatedEvent.Id, logger);
+        return new OkObjectResult(response);
     }
 
     [Function("DeleteEvent")]
     public async Task<IActionResult> DeleteEvent([HttpTrigger(AuthorizationLevel.Function, "delete", Route = "events/delete/{id}")] HttpRequest req, string id)
     {
-        try
-        {
-            var response = await container.DeleteItemAsync<EventApi>(id, new PartitionKey(id));
-
-            return new OkObjectResult(response.Resource);
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, e.Message);
-
-            return new StatusCodeResult(500);
-        }
+        var deletedEvent = await QueryExecutor.DeleteItemAsync<EventApi>(container, id, id, logger);
+        return new OkObjectResult(deletedEvent);
     }
 
     public async Task<EventApi?> SetEventAsBooked(string id, Appointment appointment)

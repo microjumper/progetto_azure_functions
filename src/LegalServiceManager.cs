@@ -1,4 +1,5 @@
-using appointment_scheduler.types;
+using AppointmentScheduler.Types;
+using AppointmentScheduler.Utils;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
@@ -6,7 +7,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
-namespace appointment_scheduler.functions;
+namespace AppointmentScheduler.Functions;
 
 public class LegalServiceManager(CosmosClient cosmosClient, ILogger<LegalServiceManager> logger)
 {
@@ -14,43 +15,25 @@ public class LegalServiceManager(CosmosClient cosmosClient, ILogger<LegalService
     private const string ContainerId = "legal_service";
     private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
-    [Function("GetAll")]
-    public async Task<IActionResult> GetAll([HttpTrigger(AuthorizationLevel.Function, "get", Route = "legalServices/all")] HttpRequest req)
+    [Function("GetLegalServices")]
+    public async Task<IActionResult> GetLegalServices([HttpTrigger(AuthorizationLevel.Function, "get", Route = "legalServices")] HttpRequest req)
     {
-        try 
-        {
-            var query = new QueryDefinition("SELECT * FROM c");
-            var response = await container.GetItemQueryIterator<LegalService>(query).ReadNextAsync();
-
-            return new OkObjectResult(response.ToList());
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, "An unexpected error occurred.");
-            
-            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
-        }
+        var query = new QueryDefinition("SELECT * FROM c");
+        var response = await QueryExecutor.RetrieveItemsAsync<LegalService>(container, query, logger);
+        return new OkObjectResult(response);
     }
 
     [Function("AddLegalService")]
     public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "legalServices/add")] HttpRequest req)
     {
-        string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+        using var reader = new StreamReader(req.Body);
+        string requestBody = await reader.ReadToEndAsync();
 
         var newService = JsonConvert.DeserializeObject<LegalService>(requestBody);
+        newService.Id = Guid.NewGuid().ToString();
 
-        try {
-            newService.Id = Guid.NewGuid().ToString();
-            var response = await container.CreateItemAsync(newService, new PartitionKey(newService.Id));
-
-            return new OkObjectResult(response.Resource);
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e.Message);
-
-            return new StatusCodeResult(500);
-        }
+        var response = await QueryExecutor.CreateItemAsync(container, newService, newService.Id, logger);
+        return new OkObjectResult(response);
     }
 
     [Function("RemoveLegalService")]
@@ -58,17 +41,7 @@ public class LegalServiceManager(CosmosClient cosmosClient, ILogger<LegalService
         [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "legalServices/delete/{id}")] HttpRequest req,
         string id)
     {
-        try
-        {
-            var response = await container.DeleteItemAsync<LegalService>(id, new PartitionKey(id));
-
-            return new OkObjectResult(response.Resource);
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, "An unexpected error occurred.");
-            
-            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
-        }
+        var deletedService = await QueryExecutor.DeleteItemAsync<LegalService>(container, id, id, logger);
+        return new OkObjectResult(deletedService);
     }
 }

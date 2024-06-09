@@ -5,7 +5,7 @@ using Microsoft.Azure.Cosmos;
 using Microsoft.Extensions.Logging;
 using Azure.Storage.Blobs;
 
-using appointment_scheduler.functions;
+using AppointmentScheduler.Functions;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()

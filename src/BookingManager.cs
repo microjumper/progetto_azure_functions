@@ -5,34 +5,24 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 
-using appointment_scheduler.types;
-using appointment_scheduler.utils;
+using AppointmentScheduler.Types;
+using AppointmentScheduler.Utils;
 
-namespace appointment_scheduler.functions;
+namespace AppointmentScheduler.Functions;
 
 public class BookingManager(CosmosClient cosmosClient, DocumentManager documentManager, EventManager eventManager, ILogger<BookingManager> logger)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "appointment";
+    private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
     [Function("GetAppointments")]
     public async Task<IActionResult> GetAppointments([HttpTrigger(AuthorizationLevel.Function, "get", Route = "appointments")] HttpRequest req)
     {
-        try
-        {
-            var container = cosmosClient.GetContainer(DatabaseId, ContainerId);
-            var query = new QueryDefinition("SELECT * FROM c");
-
-            var response = await QueryExecutor.RetrieveItemsAsync<Appointment>(container, query, logger);
-
-            return new OkObjectResult(response);
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, e.Message);
-
-            return new StatusCodeResult(StatusCodes.Status500InternalServerError);
-        }
+        var query = new QueryDefinition("SELECT * FROM c");
+        var response = await QueryExecutor.RetrieveItemsAsync<Appointment>(container, query, logger);
+        
+        return new OkObjectResult(response);
     }
 
     [Function("Book")]
