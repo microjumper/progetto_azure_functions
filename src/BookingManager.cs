@@ -15,6 +15,12 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
     private const string ContainerId = "appointment";
     private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
+    [Function("GetCurrentDate")]
+    public static IActionResult GetCurrentDate([HttpTrigger(AuthorizationLevel.Function, "get", Route = "date")] HttpRequest req)
+    {
+        return new OkObjectResult(new { dateISO = DateTime.UtcNow.ToString("o") });
+    }
+
     [Function("GetAppointments")]
     public async Task<IActionResult> GetAppointments([HttpTrigger(AuthorizationLevel.Function, "get", Route = "appointments")] HttpRequest req)
     {
