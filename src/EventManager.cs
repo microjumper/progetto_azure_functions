@@ -37,8 +37,6 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
         var query = new QueryDefinition("SELECT * FROM c");
 
         var response = await QueryExecutor.RetrieveItemsAsync<EventApi>(container, query, logger);
-    
-        EventApi[] events = response.ToArray();
 
         return new OkObjectResult(response);
     }
