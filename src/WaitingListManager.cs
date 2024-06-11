@@ -31,8 +31,23 @@ public class WaitingListManager(CosmosClient cosmosClient, ILogger<WaitingListMa
             User = deserialized.User,
             JoinedAt = DateTime.UtcNow.ToString("o")
         };
-        
+
         var response = await QueryExecutor.CreateItemAsync(container, entity, entity.Id, logger);
         return new OkObjectResult(response);
+    }
+
+    public async Task SendEmailToFirstInWaitingList(string legalServiceId)
+    {
+        await GetFirstInWaitingList(legalServiceId);
+    }
+
+    private async Task<WaitingListEntity> GetFirstInWaitingList(string legalServiceId)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.legalServiceId = @legalServiceId ORDER BY c.CreatedAt ASC")
+            .WithParameter("@legalServiceId", legalServiceId);
+        
+        var response = await QueryExecutor.RetrieveItemsAsync<WaitingListEntity>(container, query, logger);
+
+        return response.First();
     }
 }
