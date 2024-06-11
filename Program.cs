@@ -68,6 +68,7 @@ var host = new HostBuilder()
         services.AddSingleton<EventManager>();
         services.AddSingleton<DocumentManager>();
         services.AddSingleton<BookingManager>();
+        services.AddSingleton<WaitingListManager>();
     })
     .Build();
 
