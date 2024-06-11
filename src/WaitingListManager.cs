@@ -1,5 +1,6 @@
 using AppointmentScheduler.Types;
 using AppointmentScheduler.Utils;
+using Azure.Communication.Email;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
@@ -9,7 +10,7 @@ using Newtonsoft.Json;
 
 namespace AppointmentScheduler.Functions;
 
-public class WaitingListManager(CosmosClient cosmosClient, ILogger<WaitingListManager> logger)
+public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClient, ILogger<WaitingListManager> logger)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "waiting_list";
@@ -36,9 +37,41 @@ public class WaitingListManager(CosmosClient cosmosClient, ILogger<WaitingListMa
         return new OkObjectResult(response);
     }
 
-    public async Task SendEmailToFirstInWaitingList(string legalServiceId)
+    public async Task SendEmailToFirstInWaitingList(string legalServiceId, string legalServiceTitle, string eventId, string eventDate)
     {
-        await GetFirstInWaitingList(legalServiceId);
+        WaitingListEntity firstEntity = await GetFirstInWaitingList(legalServiceId);
+
+        if (firstEntity != null)
+        {
+            try 
+            {
+                EmailSendOperation sendOperation = await emailClient.SendAsync(
+                    Azure.WaitUntil.Completed,
+                    senderAddress: "DoNotReply@f965f1af-6fb4-43d0-9e24-4b783ef8cfbd.azurecomm.net",
+                    recipientAddress: firstEntity.User.Email,
+                    subject: "Appuntamento disponibile",
+                    htmlContent: $"<html><h2>{eventDate}</h2><p>Legal Service Title: {legalServiceTitle}</p><p>Event ID: {eventId}</p></html>",
+                    plainTextContent: "An appointment slot has become available. Please visit our website to book your appointment."
+                );
+
+                if (sendOperation.HasCompleted)
+                {
+                    logger.LogInformation("Email sent successfully");
+                }
+                else
+                {
+                    logger.LogError("Failed to send email");
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "An error occurred while sending the email.");
+            }
+        }
+        else
+        {
+            logger.LogWarning("No valid email address found  in the waiting list.");
+        }
     }
 
     private async Task<WaitingListEntity> GetFirstInWaitingList(string legalServiceId)

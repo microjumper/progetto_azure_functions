@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using Azure.Storage.Blobs;
 
 using AppointmentScheduler.Functions;
+using Azure.Communication.Email;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -61,6 +62,25 @@ var host = new HostBuilder()
             catch (Exception e)
             {
                 throw new InvalidOperationException($"Error creating BlobServiceClient: {e.Message}", e);
+            }
+        });
+
+        services.AddSingleton<EmailClient>(s =>
+        {
+            var connectionString = Environment.GetEnvironmentVariable("COMMUNICATION_SERVICES_CONNECTION_STRING");
+
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new InvalidOperationException("Email service connection string is null or empty.");
+            }
+
+            try
+            {
+                return new EmailClient(connectionString);
+            }
+            catch (Exception e)
+            {
+                throw new InvalidOperationException($"Error creating Email client: {e.Message}", e);
             }
         });
 

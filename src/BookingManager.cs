@@ -9,7 +9,7 @@ using Newtonsoft.Json;
 
 namespace AppointmentScheduler.Functions;
 
-public class BookingManager(CosmosClient cosmosClient, DocumentManager documentManager, EventManager eventManager, ILogger<BookingManager> logger)
+public class BookingManager(CosmosClient cosmosClient, DocumentManager documentManager, EventManager eventManager, WaitingListManager waitingListManager, ILogger<BookingManager> logger)
 {
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "appointment";
@@ -25,6 +25,16 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
     public async Task<IActionResult> GetAppointments([HttpTrigger(AuthorizationLevel.Function, "get", Route = "appointments")] HttpRequest req)
     {
         var query = new QueryDefinition("SELECT * FROM c");
+        var response = await QueryExecutor.RetrieveItemsAsync<Appointment>(container, query, logger);
+        
+        return new OkObjectResult(response);
+    }
+
+    [Function("GetUserAppointments")]
+    public async Task<IActionResult> GetUserAppointments([HttpTrigger(AuthorizationLevel.Function, "get", Route = "users/{id}/appointments")] HttpRequest req,
+    string id)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.accountId = @id").WithParameter("@id", id);
         var response = await QueryExecutor.RetrieveItemsAsync<Appointment>(container, query, logger);
         
         return new OkObjectResult(response);
@@ -96,6 +106,8 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
             var response = await container.DeleteItemAsync<Appointment>(appointmentId, new PartitionKey(appointmentId));
 
             await eventManager.SetEventAsBookable(appointment.EventId);
+
+            waitingListManager.SendEmailToFirstInWaitingList(appointment.LegalServiceId, appointment.LegalServiceTitle, appointment.EventId, appointment.EventDate);
 
             return new OkObjectResult(response.Resource);
         }
