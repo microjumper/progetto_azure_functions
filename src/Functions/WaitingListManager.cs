@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AppointmentScheduler.Functions;
 
-public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClient, ILogger<WaitingListManager> logger)
+public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClient, ILogger<WaitingListManager> logger, DocumentManager documentManager)
 {
     private const int WaitingListSize = 5;
     private const string DatabaseId = "appointment_scheduler_db";
@@ -17,7 +17,7 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
     private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
     [Function("AddToWaitingList")]
-    public async Task<IActionResult> SubscribeToWaitingList(
+    public async Task<IActionResult> AddToWaitingList(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "waitinglist/add")] HttpRequest req)
     {
         var deserialized = await Deserializer<Appointment>.Deserialize(req.Body);
@@ -36,6 +36,23 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
         };
 
         var response = await QueryExecutor.CreateItemAsync(container, entity, entity.Id, logger);
+        return new OkObjectResult(response);
+    }
+
+    [Function("RemoveFromWaitingList")]
+    public async Task<IActionResult> RemoveFromWaitingList(
+        [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "waitinglist/remove/{id}")] HttpRequest req,
+        string id)
+    {
+        var enity = await QueryExecutor.RetrieveItemAsync<WaitingListEntity>(container, id, id, logger);
+        
+        if(enity.Appointment.FileMetadata.Count > 0)  // remove attached files 
+        {
+            await documentManager.RemoveFiles(enity.Appointment.FileMetadata);
+        }
+
+        var response = await QueryExecutor.DeleteItemAsync<WaitCallback>(container, id, id, logger);
+
         return new OkObjectResult(response);
     }
 
