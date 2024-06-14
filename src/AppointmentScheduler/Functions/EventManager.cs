@@ -1,4 +1,3 @@
-using System.Net;
 using AppointmentScheduler.Types;
 using AppointmentScheduler.Utils;
 using Microsoft.AspNetCore.Http;
@@ -6,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 
 namespace AppointmentScheduler.Functions;
 
@@ -19,7 +17,7 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
     [Function("GetEventById")]
     public async Task<IActionResult?> GetEventById([HttpTrigger(AuthorizationLevel.Function, "get", Route = "events/{id}")] HttpRequest req, string id)
     {
-        var eventItem = await GetEventByIdAsync(id);
+        var eventItem = await QueryExecutor.RetrieveItemAsync<EventApi>(container, id, id, logger);
 
         if (eventItem == null)
         {
@@ -55,10 +53,7 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
     [Function("AddEvent")]
     public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "events/add")] HttpRequest req)
     {
-        using var reader = new StreamReader(req.Body);
-        string requestBody = await reader.ReadToEndAsync();
-
-        var newEvent = JsonConvert.DeserializeObject<EventApi>(requestBody);
+        var newEvent = await Deserializer<EventApi>.Deserialize(req.Body);
         newEvent.Id = Guid.NewGuid().ToString();
 
         newEvent.BackgroundColor = "#4CAF50";
@@ -71,10 +66,7 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
     [Function("UpdateEvent")]
     public async Task<IActionResult> UpdateEvent([HttpTrigger(AuthorizationLevel.Function, "put", Route = "events/update/{id}")] HttpRequest req)
     {
-        using var reader = new StreamReader(req.Body);
-        string requestBody = await reader.ReadToEndAsync();
-
-        var updatedEvent = JsonConvert.DeserializeObject<EventApi>(requestBody);
+        var updatedEvent = await Deserializer<EventApi>.Deserialize(req.Body);
 
         var response = await QueryExecutor.UpdateItemAsync(container, updatedEvent, updatedEvent.Id, updatedEvent.Id, logger);
         return new OkObjectResult(response);
@@ -87,9 +79,9 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
         return new OkObjectResult(deletedEvent);
     }
 
-    public async Task<EventApi?> SetEventAsBooked(string eventId, string appointmentId)
+    public async Task<EventApi> SetEventAsBooked(string eventId, string appointmentId)
     {
-        var eventApi = await GetEventByIdAsync(eventId);
+        var eventApi = await QueryExecutor.RetrieveItemAsync<EventApi>(container, eventId, eventId, logger);
 
         if(eventApi != null)
         {
@@ -97,15 +89,15 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
             eventApi.BackgroundColor = "#F44336";
             eventApi.BorderColor = "#F44336";
 
-            return await container.ReplaceItemAsync(eventApi, eventApi?.Id, new PartitionKey(eventApi?.Id));
+            return await QueryExecutor.UpdateItemAsync(container, eventApi, eventId, eventId, logger);
         }
 
-        return null;
+        throw new KeyNotFoundException($"Event with ID '{eventId}' not found.");
     }
 
-    public async Task<EventApi?> SetEventAsBookable(string id)
+    public async Task<EventApi> SetEventAsBookable(string id)
     {
-        var eventApi = await GetEventByIdAsync(id);
+        var eventApi = await QueryExecutor.RetrieveItemAsync<EventApi>(container, id, id, logger);
 
         if(eventApi != null)
         {
@@ -113,29 +105,9 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
             eventApi.BackgroundColor = "#4CAF50";
             eventApi.BorderColor = "#4CAF50";
 
-            return await container.ReplaceItemAsync(eventApi, eventApi?.Id, new PartitionKey(eventApi?.Id));
+            return await QueryExecutor.UpdateItemAsync(container, eventApi, id, id, logger);
         }
 
-        return null;
-    }
-
-    private async Task<EventApi?> GetEventByIdAsync(string id)
-    {
-        try
-        {
-            return (await container.ReadItemAsync<EventApi>(id, new PartitionKey(id))).Resource;
-        }
-        catch (CosmosException ce) when (ce.StatusCode == HttpStatusCode.NotFound)
-        {
-            logger.LogInformation($"Event with ID '{id}' not found.");
-
-            return null;
-        }
-        catch (Exception e)
-        {
-            logger.LogError(e, $"Error retrieving event with ID '{id}'");
-            
-            throw;
-        }
+        throw new KeyNotFoundException($"Event with ID '{id}' not found.");
     }
 }

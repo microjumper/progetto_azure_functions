@@ -5,6 +5,23 @@ namespace AppointmentScheduler.Utils;
 
 public static class QueryExecutor
 {
+    public static async Task<T> RetrieveItemAsync<T>(Container container, string id, string partitionKey, ILogger logger)
+    {
+        try
+        {
+            return (await container.ReadItemAsync<T>(id, new PartitionKey(partitionKey))).Resource;
+        }
+        catch (CosmosException cosmosException)
+        {
+            logger.LogError(cosmosException, "Cosmos DB error occurred while retrieving item: {Message}", cosmosException.Message);
+            throw;
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "An error occurred while retrieving item: {Message}", e.Message);
+            throw;
+        }
+    }
     public static async Task<List<T>> RetrieveItemsAsync<T>(Container container, QueryDefinition query, ILogger logger)
     {
         var results = new List<T>();
