@@ -85,6 +85,7 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
 
         if(eventApi != null)
         {
+            eventApi.ExtendedProps?.Remove("appointment");
             eventApi.ExtendedProps?.Add("appointment", appointmentId);
             eventApi.BackgroundColor = "#F44336";
             eventApi.BorderColor = "#F44336";

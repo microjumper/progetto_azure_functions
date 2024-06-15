@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net;
 using AppointmentScheduler.Types;
 using AppointmentScheduler.Utils;
 using Azure.Communication.Email;
@@ -12,6 +13,7 @@ namespace AppointmentScheduler.Functions;
 
 public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClient, ILogger<WaitingListManager> logger, DocumentManager documentManager, EventManager eventManager)
 {
+    private CancellationTokenSource? cancellationTokenSource;
     private const int WaitingListSize = 5;
     private const string DatabaseId = "appointment_scheduler_db";
     private const string ContainerId = "waiting_list";
@@ -45,14 +47,7 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
         [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "waitinglist/remove/{id}")] HttpRequest req,
         string id)
     {
-        var enity = await QueryExecutor.RetrieveItemAsync<WaitingListEntity>(container, id, id, logger);
-        
-        if(enity.Appointment.FileMetadata.Count > 0)  // remove attached files 
-        {
-            await documentManager.RemoveFiles(enity.Appointment.FileMetadata);
-        }
-
-        var response = await QueryExecutor.DeleteItemAsync<WaitCallback>(container, id, id, logger);
+        var response = await RemoveFromWaitingList(id);
 
         return new OkObjectResult(response);
     }
@@ -74,16 +69,57 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
 
         if(entity == null) 
         {
+            logger.LogInformation("No users found in waiting list.");
+
             await eventManager.SetEventAsBookable(eventId);
         }
         else
         {
+            entity.Appointment.EventDate = eventDate;
+            entity.Appointment.EventId = eventId;
+
+            await QueryExecutor.UpdateItemAsync(container, entity, entity.Id, entity.Id, logger);
+            
             await SendConfirmationEmail(entity.Appointment.User.Email, eventDate, legalServiceTitle);
-            // wait for confirmation
-            // if confirm, add appointment to db, remove entity
-            // else, remove entity, call this function
+
+            cancellationTokenSource = new();
+
+            try
+            {
+                await Task.Delay(180000, cancellationTokenSource.Token); // 3 minutes
+            }
+            catch (OperationCanceledException)
+            {
+                logger.LogInformation("Task was cancelled. User confirmed the appointment.");
+
+                await RemoveFromWaitingList(entity.Id);
+
+                logger.LogInformation("Entity remove from waiting list");
+
+                return;
+            }
+
+            try // if the user doesn't confirm within the delay time
+            {
+                //  check if the reservation is still inside the wating list
+                var response = await QueryExecutor.RetrieveItemAsync<WaitingListEntity>(container, entity.Id, entity.Id, logger);
+
+                await RemoveFromWaitingList(entity.Id); // is so, remove it
+
+                _ = SendCancellationEmail(entity.Appointment.User.Email);   // infor user of the cancellation
+                
+                _ = NotifyWaitingList(legalServiceId, legalServiceTitle, eventId, eventDate);   // start over
+            }
+            catch (CosmosException cosmosException) when (cosmosException.StatusCode == HttpStatusCode.NotFound)
+            {
+                logger.LogInformation("User confirmed the appointment.");
+
+                await RemoveFromWaitingList(entity.Id);
+            }
         }
     }
+
+    public void StopNotificationTask() => cancellationTokenSource?.Cancel();
 
     private async Task SendConfirmationEmail(string recipientAddress, string eventDate, string legalServiceTitle)
     {
@@ -94,6 +130,19 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
             <p>
                 Un appuntamento per il servizio <strong>{legalServiceTitle}</strong> è ora disponibile in data <strong>{FormatDate(eventDate)}</strong>.<br>
                 Puoi confermare l'appuntamento dal tuo profilo entro il prossimo minuto.
+            </p>",
+            plainTextContent: ""
+        );
+    }
+
+    private async Task SendCancellationEmail(string recipientAddress)
+    {
+        await SendEmail(
+            recipientAddress,
+            "Rimosso dalla lista di attesa",
+            htmlContent: $@"
+            <p>
+                Con la presente desideriamo comunicarti che non sei più incluso nella lista d'attesa. Ti ringraziamo sinceramente per l'interesse dimostrato nei nostri servizi..
             </p>",
             plainTextContent: ""
         );
@@ -123,46 +172,13 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
         }
     }
 
-    public async Task SendEmailToFirstInWaitingList(string legalServiceId, string legalServiceTitle, string eventId, string eventDate)
+    private async Task<int> GetWaitingListCountAsync(string legalServiceId)
     {
-        WaitingListEntity firstEntity = await GetFirstInWaitingList(legalServiceId);
-
-        if (firstEntity != null)
-        {
-            try 
-            {
-                EmailSendOperation sendOperation = await emailClient.SendAsync(
-                    Azure.WaitUntil.Completed,
-                    senderAddress: "DoNotReply@f965f1af-6fb4-43d0-9e24-4b783ef8cfbd.azurecomm.net",
-                    recipientAddress: firstEntity.Appointment.User.Email,
-                    subject: "Appuntamento disponibile",
-                    htmlContent: $"<html><h2>{eventDate}</h2><p>Legal Service Title: {legalServiceTitle}</p><p>Event ID: {eventId}</p></html>",
-                    plainTextContent: "An appointment slot has become available. Please visit our website to book your appointment."
-                );
-
-                if (sendOperation.HasCompleted)
-                {
-                    logger.LogInformation("Email sent successfully");
-                }
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "An error occurred while sending the email.");
-            }
-        }
-        else
-        {
-            logger.LogWarning("No valid email address found  in the waiting list.");
-        }
+    var countQuery = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.appointment.legalServiceId = @legalServiceId")
+        .WithParameter("@legalServiceId", legalServiceId);
+    var countResponse = await container.GetItemQueryIterator<int>(countQuery).ReadNextAsync();
+    return countResponse.FirstOrDefault();
     }
-    
-     private async Task<int> GetWaitingListCountAsync(string legalServiceId)
-     {
-        var countQuery = new QueryDefinition("SELECT VALUE COUNT(1) FROM c WHERE c.appointment.legalServiceId = @legalServiceId")
-            .WithParameter("@legalServiceId", legalServiceId);
-        var countResponse = await container.GetItemQueryIterator<int>(countQuery).ReadNextAsync();
-        return countResponse.FirstOrDefault();
-     }
 
     private async Task<WaitingListEntity?> GetFirstInWaitingList(string legalServiceId)
     {
@@ -170,6 +186,18 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
             .WithParameter("@legalServiceId", legalServiceId);
         var response = await QueryExecutor.RetrieveItemsAsync<WaitingListEntity>(container, query, logger);
         return response.FirstOrDefault();
+    }
+
+    private async Task<WaitingListEntity> RemoveFromWaitingList(string userId)
+    {
+        var enity = await QueryExecutor.RetrieveItemAsync<WaitingListEntity>(container, userId, userId, logger);
+        
+        if(enity.Appointment.FileMetadata.Count > 0)  // remove attached files 
+        {
+            await documentManager.RemoveFiles(enity.Appointment.FileMetadata);
+        }
+
+        return await QueryExecutor.DeleteItemAsync<WaitingListEntity>(container, userId, userId, logger);
     }
 
     private string FormatDate(string dateString)
@@ -184,8 +212,6 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
         string format = "dddd d MMMM H:mm";
         
         // Format the DateTimeOffset object using the custom format and Italian culture
-        string formattedDateTime = dateTimeOffset.ToString(format, italianCulture);
-        
-        return formattedDateTime;
+        return dateTimeOffset.ToString(format, italianCulture);
     }
 }

@@ -56,6 +56,8 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
 
         var response = await QueryExecutor.CreateItemAsync(container, appointment, appointment.Id, logger);
 
+        waitingListManager.StopNotificationTask();
+
         await eventManager.SetEventAsBooked(appointment.EventId, appointment.Id);
 
         return new OkObjectResult(response);
