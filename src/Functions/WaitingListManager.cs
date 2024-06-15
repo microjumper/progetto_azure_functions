@@ -1,3 +1,4 @@
+using System.Globalization;
 using AppointmentScheduler.Types;
 using AppointmentScheduler.Utils;
 using Azure.Communication.Email;
@@ -9,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace AppointmentScheduler.Functions;
 
-public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClient, ILogger<WaitingListManager> logger, DocumentManager documentManager)
+public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClient, ILogger<WaitingListManager> logger, DocumentManager documentManager, EventManager eventManager)
 {
     private const int WaitingListSize = 5;
     private const string DatabaseId = "appointment_scheduler_db";
@@ -67,6 +68,61 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
         return new OkObjectResult(response);
     }
 
+    public async Task NotifyWaitingList(string legalServiceId, string legalServiceTitle, string eventId, string eventDate)
+    {
+        var entity = await GetFirstInWaitingList(legalServiceId);
+
+        if(entity == null) 
+        {
+            await eventManager.SetEventAsBookable(eventId);
+        }
+        else
+        {
+            await SendConfirmationEmail(entity.Appointment.User.Email, eventDate, legalServiceTitle);
+            // wait for confirmation
+            // if confirm, add appointment to db, remove entity
+            // else, remove entity, call this function
+        }
+    }
+
+    private async Task SendConfirmationEmail(string recipientAddress, string eventDate, string legalServiceTitle)
+    {
+        await SendEmail(
+            recipientAddress,
+            "Appuntamento disponibile",
+            htmlContent: $@"
+            <p>
+                Un appuntamento per il servizio <strong>{legalServiceTitle}</strong> è ora disponibile in data <strong>{FormatDate(eventDate)}</strong>.<br>
+                Puoi confermare l'appuntamento dal tuo profilo entro il prossimo minuto.
+            </p>",
+            plainTextContent: ""
+        );
+    }
+
+    private async Task SendEmail(string recipientAddress, string subject, string htmlContent, string plainTextContent)
+    {
+        try 
+        {
+            EmailSendOperation sendOperation = await emailClient.SendAsync(
+                Azure.WaitUntil.Completed,
+                senderAddress: "DoNotReply@f965f1af-6fb4-43d0-9e24-4b783ef8cfbd.azurecomm.net",
+                recipientAddress,
+                subject,
+                htmlContent,
+                plainTextContent
+            );
+
+            if (sendOperation.HasCompleted)
+            {
+                logger.LogInformation("Email sent successfully");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "An error occurred while sending the email.");
+        }
+    }
+
     public async Task SendEmailToFirstInWaitingList(string legalServiceId, string legalServiceTitle, string eventId, string eventDate)
     {
         WaitingListEntity firstEntity = await GetFirstInWaitingList(legalServiceId);
@@ -108,11 +164,28 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
         return countResponse.FirstOrDefault();
      }
 
-    private async Task<WaitingListEntity> GetFirstInWaitingList(string legalServiceId)
+    private async Task<WaitingListEntity?> GetFirstInWaitingList(string legalServiceId)
     {
         var query = new QueryDefinition("SELECT * FROM c WHERE c.appointment.legalServiceId = @legalServiceId ORDER BY c.addedOn ASC")
             .WithParameter("@legalServiceId", legalServiceId);
         var response = await QueryExecutor.RetrieveItemsAsync<WaitingListEntity>(container, query, logger);
-        return response.First();
+        return response.FirstOrDefault();
+    }
+
+    private string FormatDate(string dateString)
+    {        
+        // Parse the string into a DateTimeOffset object
+        DateTimeOffset dateTimeOffset = DateTimeOffset.Parse(dateString);
+        
+        // Define Italian culture for formatting
+        CultureInfo italianCulture = CultureInfo.GetCultureInfo("it-IT");
+        
+        // Create a custom format string
+        string format = "dddd d MMMM H:mm";
+        
+        // Format the DateTimeOffset object using the custom format and Italian culture
+        string formattedDateTime = dateTimeOffset.ToString(format, italianCulture);
+        
+        return formattedDateTime;
     }
 }

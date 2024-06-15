@@ -75,12 +75,8 @@ public class BookingManager(CosmosClient cosmosClient, DocumentManager documentM
 
         var response = await QueryExecutor.DeleteItemAsync<Appointment>(container, appointmentId, appointmentId, logger);
 
-        // before setting the event as bookable, send an email to all the people in the waiting list until you find one that confirms. 
-        // if no one is found, set the event as bookable
-
-        await eventManager.SetEventAsBookable(appointment.EventId);
-
-        waitingListManager.SendEmailToFirstInWaitingList(appointment.LegalServiceId, appointment.LegalServiceTitle, appointment.EventId, appointment.EventDate);
+        // fire and forget
+        _ = waitingListManager.NotifyWaitingList(appointment.LegalServiceId, appointment.LegalServiceTitle, appointment.EventId, appointment.EventDate);
 
         return new OkObjectResult(response);
     }
