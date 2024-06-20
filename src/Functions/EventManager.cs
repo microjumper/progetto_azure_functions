@@ -50,6 +50,17 @@ public class EventManager(CosmosClient cosmosClient, ILogger<EventManager> logge
         return new OkObjectResult(response);
     }
 
+    [Function("GetBookableEventsByLegalService")]
+    public async Task<IActionResult> GetBookableEventsByLegalService(
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "services/events/bookable/{id}")] HttpRequest req, string id)
+    {
+        var query = new QueryDefinition("SELECT * FROM c WHERE c.extendedProps.legalService = @legalServiceId AND NOT IS_DEFINED(c.extendedProps.appointment)")
+            .WithParameter("@legalServiceId", id);
+
+        var response = await QueryExecutor.RetrieveItemsAsync<EventApi>(container, query, logger);
+        return new OkObjectResult(response);
+    }
+
     [Function("AddEvent")]
     public async Task<IActionResult> AddEvent([HttpTrigger(AuthorizationLevel.Function, "post", Route = "events/add")] HttpRequest req)
     {
