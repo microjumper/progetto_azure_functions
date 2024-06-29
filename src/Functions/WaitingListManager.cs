@@ -19,6 +19,15 @@ public class WaitingListManager(CosmosClient cosmosClient, EmailClient emailClie
     private const string ContainerId = "waiting_list";
     private readonly Container container = cosmosClient.GetContainer(DatabaseId, ContainerId);
 
+    [Function("GetWaitingLists")]
+    public async Task<IActionResult> GetWaitingLists([HttpTrigger(AuthorizationLevel.Function, "get", Route = "waitinglist/all")] HttpRequest req)
+    {
+        var query = new QueryDefinition("SELECT * FROM c");
+
+        var response = await QueryExecutor.RetrieveItemsAsync<WaitingListEntity>(container, query, logger);
+        return new OkObjectResult(response);
+    }
+
     [Function("AddToWaitingList")]
     public async Task<IActionResult> AddToWaitingList(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "waitinglist/add")] HttpRequest req)
